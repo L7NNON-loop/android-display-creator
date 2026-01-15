@@ -11,17 +11,17 @@ const HowItWorks = () => {
     {
       icon: <CreditCard className="w-5 h-5" />,
       title: "Faça o Pagamento",
-      description: "Pague 10MT via M-Pesa ou transferência",
+      description: "PAGUE 10MT VIA M-PESA OU TRANSFERENCIA",
     },
     {
       icon: <Key className="w-5 h-5" />,
       title: "Receba seu Código",
-      description: "Após confirmação, enviamos seu código de acesso",
+      description: "APOS CONFIRMACAO, ENVIAMOS SEU CODIGO DE ACESSO",
     },
     {
       icon: <Play className="w-5 h-5" />,
       title: "Assista aos Jogos",
-      description: "Acesso total por 24 horas ao futebol ao vivo",
+      description: "Acesso total por 5 horas ao futebol ao vivo",
     },
   ];
 
