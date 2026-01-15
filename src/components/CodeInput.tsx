@@ -57,9 +57,10 @@ const CodeInput = () => {
     <div className="space-y-3 no-select">
       <Input
         type="text"
-        placeholder="C Ó D I G O"
+        placeholder="CÓDIGO"
         value={code}
-        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
+        maxLength={6}
         className="h-12 text-center tracking-[0.3em] font-medium bg-secondary border-border placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
       />
       <Button
