@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2, Copy, Shield } from "lucide-react";
+import { Plus, Trash2, Copy, Shield, Lock } from "lucide-react";
 
 interface AccessCode {
   id: string;
@@ -14,7 +14,11 @@ interface AccessCode {
   used_at: string | null;
 }
 
+const ADMIN_PASSWORD = "PERCY";
+
 const Admin = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState("");
   const [codes, setCodes] = useState<AccessCode[]>([]);
   const [newCode, setNewCode] = useState("");
   const [validityHours, setValidityHours] = useState("24");
@@ -34,8 +38,17 @@ const Admin = () => {
   };
 
   useEffect(() => {
-    fetchCodes();
+    const savedAuth = sessionStorage.getItem("admin_auth");
+    if (savedAuth === "true") {
+      setIsAuthenticated(true);
+    }
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCodes();
+    }
+  }, [isAuthenticated]);
 
   const generateRandomCode = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -103,6 +116,50 @@ const Admin = () => {
       minute: "2-digit",
     });
   };
+
+  const handleLogin = () => {
+    if (password === ADMIN_PASSWORD) {
+      setIsAuthenticated(true);
+      sessionStorage.setItem("admin_auth", "true");
+      toast({ title: "Bem-vindo!", description: "Acesso autorizado" });
+    } else {
+      toast({ title: "Senha incorreta", description: "Tente novamente", variant: "destructive" });
+    }
+    setPassword("");
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center space-y-3">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/20 border border-primary/30">
+              <Lock className="w-8 h-8 text-primary" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Área Restrita</h1>
+            <p className="text-sm text-muted-foreground">Digite a senha para acessar o painel</p>
+          </div>
+          
+          <div className="space-y-3">
+            <Input
+              type="password"
+              placeholder="SENHA"
+              value={password}
+              onChange={(e) => setPassword(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+              className="h-12 text-center tracking-[0.2em] font-medium bg-secondary border-border"
+            />
+            <Button
+              onClick={handleLogin}
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
+            >
+              ENTRAR
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4">
