@@ -1,14 +1,56 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 const CodeInput = () => {
   const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
-    if (code.trim()) {
-      console.log("Código enviado:", code);
+  const handleSubmit = async () => {
+    if (!code.trim()) return;
+
+    setLoading(true);
+    
+    const { data, error } = await supabase
+      .from("access_codes")
+      .select("*")
+      .eq("code", code.toUpperCase())
+      .single();
+
+    if (error || !data) {
+      toast({ title: "Código inválido", description: "Verifique e tente novamente", variant: "destructive" });
+      setLoading(false);
+      return;
     }
+
+    const now = new Date();
+    const expiresAt = new Date(data.expires_at);
+
+    if (expiresAt < now) {
+      toast({ title: "Código expirado", description: "Este código já não é válido", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    if (data.is_used) {
+      toast({ title: "Código já usado", description: "Este código já foi utilizado", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    // Mark code as used
+    await supabase
+      .from("access_codes")
+      .update({ is_used: true, used_at: now.toISOString() })
+      .eq("id", data.id);
+
+    toast({ title: "Sucesso!", description: "Redirecionando..." });
+    
+    // Redirect to stream
+    window.location.href = "https://loco.com/streamers/futebol.online?lang=pt-br";
   };
 
   return (
@@ -22,13 +64,11 @@ const CodeInput = () => {
       />
       <Button
         onClick={handleSubmit}
+        disabled={loading}
         className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold tracking-wide glow-primary transition-all duration-300"
       >
-        ENTRAR
+        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "ENTRAR"}
       </Button>
-      <p className="text-center text-xs text-muted-foreground">
-        Use: <span className="text-primary font-semibold">FUTEBOL24</span> para testar
-      </p>
     </div>
   );
 };

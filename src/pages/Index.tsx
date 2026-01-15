@@ -29,9 +29,12 @@ const Index = () => {
         </div>
       </div>
 
-      <footer className="py-4 text-center">
+      <footer className="py-4 text-center space-y-1">
         <p className="text-xs text-muted-foreground/50 no-select">
           Acesso válido por 24 horas após ativação
+        </p>
+        <p className="text-xs text-muted-foreground/50 no-select">
+          © 2024 Futebol ao Vivo • Todos os direitos reservados
         </p>
       </footer>
     </div>
