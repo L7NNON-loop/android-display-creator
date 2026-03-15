@@ -1,269 +1,230 @@
-import { useState, useEffect } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, PackagePlus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2, Copy, Shield, Lock } from "lucide-react";
+import { baseProducts, categories, MARKETPLACE_STORAGE_KEYS, Order, Product } from "@/data/marketplace";
 
-interface AccessCode {
-  id: string;
-  code: string;
-  is_used: boolean;
-  created_at: string;
-  expires_at: string;
-  used_at: string | null;
-}
+const currency = new Intl.NumberFormat("pt-PT", { style: "currency", currency: "MZN", maximumFractionDigits: 2 });
 
-const ADMIN_PASSWORD = "PERCY";
+type ProductForm = {
+  name: string;
+  category: Product["category"];
+  price: string;
+  stock: string;
+  seller: string;
+  location: string;
+  image: string;
+  description: string;
+};
+
+const formDefaults: ProductForm = {
+  name: "",
+  category: "Smartphones",
+  price: "",
+  stock: "",
+  seller: "",
+  location: "",
+  image: "",
+  description: "",
+};
 
 const Admin = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState("");
-  const [codes, setCodes] = useState<AccessCode[]>([]);
-  const [newCode, setNewCode] = useState("");
-  const [validityHours, setValidityHours] = useState("24");
-  const [loading, setLoading] = useState(false);
-
-  const fetchCodes = async () => {
-    const { data, error } = await supabase
-      .from("access_codes")
-      .select("*")
-      .order("created_at", { ascending: false });
-    
-    if (error) {
-      toast({ title: "Erro", description: "Falha ao carregar códigos", variant: "destructive" });
-      return;
-    }
-    setCodes(data || []);
-  };
+  const [customProducts, setCustomProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [form, setForm] = useState<ProductForm>(formDefaults);
 
   useEffect(() => {
-    const savedAuth = sessionStorage.getItem("admin_auth");
-    if (savedAuth === "true") {
-      setIsAuthenticated(true);
-    }
+    const productsRaw = localStorage.getItem(MARKETPLACE_STORAGE_KEYS.customProducts);
+    const ordersRaw = localStorage.getItem(MARKETPLACE_STORAGE_KEYS.orders);
+
+    setCustomProducts(productsRaw ? JSON.parse(productsRaw) : []);
+    setOrders(ordersRaw ? JSON.parse(ordersRaw) : []);
   }, []);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchCodes();
-    }
-  }, [isAuthenticated]);
+  const allProducts = useMemo(() => [...baseProducts, ...customProducts], [customProducts]);
 
-  const generateRandomCode = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let result = "";
-    for (let i = 0; i < 6; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setNewCode(result);
+  const saveProducts = (nextProducts: Product[]) => {
+    setCustomProducts(nextProducts);
+    localStorage.setItem(MARKETPLACE_STORAGE_KEYS.customProducts, JSON.stringify(nextProducts));
   };
 
-  const handleCreateCode = async () => {
-    if (!newCode.trim()) {
-      toast({ title: "Erro", description: "Digite um código", variant: "destructive" });
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!form.name || !form.price || !form.stock || !form.seller || !form.location || !form.description) {
+      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
       return;
     }
 
-    setLoading(true);
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + parseInt(validityHours));
+    const newProduct: Product = {
+      id: `custom-${Date.now()}`,
+      name: form.name,
+      category: form.category,
+      price: Number(form.price),
+      stock: Number(form.stock),
+      seller: form.seller,
+      location: form.location,
+      image:
+        form.image || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=1200",
+      description: form.description,
+      rating: 5,
+    };
 
-    const { error } = await supabase
-      .from("access_codes")
-      .insert({
-        code: newCode.toUpperCase(),
-        expires_at: expiresAt.toISOString(),
-      });
-
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Sucesso", description: "Código criado!" });
-      setNewCode("");
-      fetchCodes();
-    }
-    setLoading(false);
+    saveProducts([newProduct, ...customProducts]);
+    setForm(formDefaults);
+    toast({ title: "Produto criado", description: "Produto adicionado ao marketplace local." });
   };
 
-  const handleDeleteCode = async (id: string) => {
-    const { error } = await supabase
-      .from("access_codes")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Sucesso", description: "Código removido!" });
-      fetchCodes();
-    }
+  const removeProduct = (id: string) => {
+    const nextProducts = customProducts.filter((product) => product.id !== id);
+    saveProducts(nextProducts);
+    toast({ title: "Produto removido" });
   };
-
-  const copyToClipboard = (code: string) => {
-    navigator.clipboard.writeText(code);
-    toast({ title: "Copiado!", description: code });
-  };
-
-  const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date();
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const handleLogin = () => {
-    if (password === ADMIN_PASSWORD) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem("admin_auth", "true");
-      toast({ title: "Bem-vindo!", description: "Acesso autorizado" });
-    } else {
-      toast({ title: "Senha incorreta", description: "Tente novamente", variant: "destructive" });
-    }
-    setPassword("");
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-sm space-y-6">
-          <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/20 border border-primary/30">
-              <Lock className="w-8 h-8 text-primary" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground">Área Restrita</h1>
-            <p className="text-sm text-muted-foreground">Digite a senha para acessar o painel</p>
-          </div>
-          
-          <div className="space-y-3">
-            <Input
-              type="password"
-              placeholder="SENHA"
-              value={password}
-              onChange={(e) => setPassword(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-              className="h-12 text-center tracking-[0.2em] font-medium bg-secondary border-border"
-            />
-            <Button
-              onClick={handleLogin}
-              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
-            >
-              ENTRAR
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="p-2 rounded-xl bg-primary/20 border border-primary/30">
-            <Shield className="w-6 h-6 text-primary" />
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Painel do vendedor</h1>
+            <p className="text-sm text-muted-foreground">Gerencie produtos e pedidos em MZN</p>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Painel Admin</h1>
-        </div>
-
-        {/* Create new code */}
-        <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
-          <h2 className="text-sm font-bold text-muted-foreground tracking-widest">GERAR NOVO CÓDIGO</h2>
-          
-          <div className="flex gap-2">
-            <Input
-              type="text"
-              placeholder="CÓDIGO"
-              value={newCode}
-              onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-              className="flex-1 h-12 text-center tracking-[0.2em] font-medium bg-secondary border-border"
-            />
-            <Button
-              onClick={generateRandomCode}
-              variant="outline"
-              className="h-12 px-4"
-            >
-              Gerar
-            </Button>
-          </div>
-
-          <div className="flex gap-2 items-center">
-            <span className="text-sm text-muted-foreground">Validade:</span>
-            <Input
-              type="number"
-              value={validityHours}
-              onChange={(e) => setValidityHours(e.target.value)}
-              className="w-20 h-10 text-center bg-secondary border-border"
-            />
-            <span className="text-sm text-muted-foreground">horas</span>
-          </div>
-
-          <Button
-            onClick={handleCreateCode}
-            disabled={loading}
-            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            CRIAR CÓDIGO
+          <Button asChild variant="outline">
+            <Link to="/">
+              <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao marketplace
+            </Link>
           </Button>
         </div>
+      </header>
 
-        {/* List codes */}
-        <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
-          <h2 className="text-sm font-bold text-muted-foreground tracking-widest">CÓDIGOS ATIVOS</h2>
-          
-          <div className="divide-y divide-border">
-            {codes.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Nenhum código criado</p>
+      <main className="max-w-7xl mx-auto px-4 py-6 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PackagePlus className="h-5 w-5" /> Cadastrar novo produto
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-3">
+              <div className="md:col-span-2 space-y-1">
+                <Label>Nome</Label>
+                <Input value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Categoria</Label>
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm((c) => ({ ...c, category: e.target.value as Product["category"] }))}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {categories.map((category) => (
+                    <option key={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Preço (MZN)</Label>
+                <Input type="number" value={form.price} onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))} />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Stock</Label>
+                <Input type="number" value={form.stock} onChange={(e) => setForm((c) => ({ ...c, stock: e.target.value }))} />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Vendedor</Label>
+                <Input value={form.seller} onChange={(e) => setForm((c) => ({ ...c, seller: e.target.value }))} />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Localização</Label>
+                <Input value={form.location} onChange={(e) => setForm((c) => ({ ...c, location: e.target.value }))} />
+              </div>
+
+              <div className="space-y-1">
+                <Label>URL da imagem (opcional)</Label>
+                <Input value={form.image} onChange={(e) => setForm((c) => ({ ...c, image: e.target.value }))} />
+              </div>
+
+              <div className="md:col-span-2 space-y-1">
+                <Label>Descrição</Label>
+                <Input value={form.description} onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))} />
+              </div>
+
+              <div className="md:col-span-2">
+                <Button className="w-full" type="submit">Salvar produto</Button>
+              </div>
+            </form>
+            <p className="text-xs text-muted-foreground mt-4">
+              Firebase ainda não conectado. Produtos e pedidos são persistidos localmente no navegador.
+            </p>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumo</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p>Total de produtos: <span className="font-semibold">{allProducts.length}</span></p>
+              <p>Produtos personalizados: <span className="font-semibold">{customProducts.length}</span></p>
+              <p>Pedidos recebidos: <span className="font-semibold">{orders.length}</span></p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Últimos pedidos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 max-h-80 overflow-auto">
+              {orders.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum pedido ainda.</p>
+              ) : (
+                orders.slice(0, 6).map((order) => (
+                  <div key={order.id} className="border rounded-lg p-3 space-y-1 text-sm">
+                    <p className="font-semibold">{order.id} • {order.customerName}</p>
+                    <p className="text-muted-foreground">{order.paymentMethod} • {currency.format(order.total)}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleString("pt-PT")}</p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Produtos personalizados cadastrados</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {customProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Ainda não há produtos personalizados.</p>
             ) : (
-              codes.map((item) => (
-                <div key={item.id} className="py-3 flex items-center justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-foreground">{item.code}</span>
-                      <button onClick={() => copyToClipboard(item.code)} className="text-muted-foreground hover:text-primary">
-                        <Copy className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Expira: {formatDate(item.expires_at)}
-                    </div>
+              customProducts.map((product) => (
+                <div key={product.id} className="flex items-center justify-between gap-3 border rounded-lg p-3">
+                  <div>
+                    <p className="font-semibold">{product.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {product.category} • {currency.format(product.price)} • stock {product.stock}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {item.is_used ? (
-                      <span className="text-xs px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-400">Usado</span>
-                    ) : isExpired(item.expires_at) ? (
-                      <span className="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-400">Expirado</span>
-                    ) : (
-                      <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">Ativo</span>
-                    )}
-                    <button
-                      onClick={() => handleDeleteCode(item.id)}
-                      className="text-muted-foreground hover:text-red-400 p-1"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  <Button variant="destructive" size="icon" onClick={() => removeProduct(product.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               ))
             )}
-          </div>
-        </div>
-
-        <footer className="py-4 text-center space-y-1">
-          <p className="text-xs text-muted-foreground/50">
-            Acesso válido por 24 horas após ativação
-          </p>
-          <p className="text-xs text-muted-foreground/50">
-            © 2024 Futebol ao Vivo • Todos os direitos reservados
-          </p>
-        </footer>
-      </div>
+          </CardContent>
+        </Card>
+      </main>
     </div>
   );
 };
